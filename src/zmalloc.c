@@ -66,7 +66,7 @@ void zlibc_free(void *ptr) {
 #define realloc(ptr,size) je_realloc(ptr,size)
 #define free(ptr) je_free(ptr)
 #endif
-
+/*gcc 4.1.0版本后提供原子操作函数,HAVE_ATOMIC宏在config.h定义*/
 #ifdef HAVE_ATOMIC
 #define update_zmalloc_stat_add(__n) __sync_add_and_fetch(&used_memory, (__n))
 #define update_zmalloc_stat_sub(__n) __sync_sub_and_fetch(&used_memory, (__n))
@@ -87,6 +87,7 @@ void zlibc_free(void *ptr) {
 
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
+    /* 按sizoef(long)对齐,例如sizeof(long)=8,_n=27,执行后_n=32 */
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     if (zmalloc_thread_safe) { \
         update_zmalloc_stat_add(_n); \
@@ -97,6 +98,7 @@ void zlibc_free(void *ptr) {
 
 #define update_zmalloc_stat_free(__n) do { \
     size_t _n = (__n); \
+    /* 按sizoef(long)对齐,与alloc函数对应,例如sizeof(long)=8,_n=27,执行后_n=32 */
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     if (zmalloc_thread_safe) { \
         update_zmalloc_stat_sub(_n); \
@@ -109,13 +111,16 @@ static size_t used_memory = 0;
 static int zmalloc_thread_safe = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/*
+https://stackoverflow.com/questions/42660689/why-would-i-need-use-fflush-on-stdout-before-writing-to-stderr
+*/
 static void zmalloc_default_oom(size_t size) {
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
     fflush(stderr);
     abort();
 }
-
+/*函数指针*/
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
 void *zmalloc(size_t size) {

@@ -34,7 +34,8 @@
 /* Double expansion needed for stringification of macro values. */
 #define __xstr(s) __str(s)
 #define __str(s) #s
-
+/*如果没定义HAVE_MALLOC_SIZE，则每一段分配好的内存头部多分配PREFIX_SIZE，记录分配的空间大小*/
+/*Google TC_MALLOC库*/
 #if defined(USE_TCMALLOC)
 #define ZMALLOC_LIB ("tcmalloc-" __xstr(TC_VERSION_MAJOR) "." __xstr(TC_VERSION_MINOR))
 #include <google/tcmalloc.h>
@@ -44,7 +45,7 @@
 #else
 #error "Newer version of tcmalloc required"
 #endif
-
+/*Facebook JEMALLOC库 */
 #elif defined(USE_JEMALLOC)
 #define ZMALLOC_LIB ("jemalloc-" __xstr(JEMALLOC_VERSION_MAJOR) "." __xstr(JEMALLOC_VERSION_MINOR) "." __xstr(JEMALLOC_VERSION_BUGFIX))
 #include <jemalloc/jemalloc.h>
@@ -55,6 +56,7 @@
 #error "Newer version of jemalloc required"
 #endif
 
+/*mac系统*/
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #define HAVE_MALLOC_SIZE 1
