@@ -87,7 +87,7 @@ void zlibc_free(void *ptr) {
 
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
-    /* 按sizoef(long)对齐,例如sizeof(long)=8,_n=27,执行后_n=32 */
+    /*按sizoef(long)对齐,例如sizeof(long)=8,_n=27,执行后_n=32*/ \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     if (zmalloc_thread_safe) { \
         update_zmalloc_stat_add(_n); \
@@ -98,7 +98,7 @@ void zlibc_free(void *ptr) {
 
 #define update_zmalloc_stat_free(__n) do { \
     size_t _n = (__n); \
-    /* 按sizoef(long)对齐,与alloc函数对应,例如sizeof(long)=8,_n=27,执行后_n=32 */
+    /* 按sizoef(long)对齐,与alloc函数对应,例如sizeof(long)=8,_n=27,执行后_n=32 */ \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     if (zmalloc_thread_safe) { \
         update_zmalloc_stat_sub(_n); \
