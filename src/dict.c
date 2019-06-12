@@ -56,6 +56,22 @@
  * 程序可以手动地允许或阻止哈希表进行 rehash ，
  * 这在 Redis 使用子进程进行保存操作时，可以有效地利用 copy-on-write 机制。
  *
+ *            copy-on-write
+ * fork创建出的子进程，与父进程共享内存空间。也就是说，如果子进程不对内存空间进行写入操作的话，内存
+ * 空间中的数据并不会复制给子进程，这样创建子进程的速度就很快了！(不用复制，直接引用父进程的物理空间)。
+ * 并且如果在fork函数返回之后，子进程第一时间exec一个新的可执行映像，那么也不会浪费时间和内存空间了。
+ * 
+ * fork()之后，kernel把父进程中所有的内存页的权限都设为read-only，然后子进程的地址空间指向父进程。
+ * 当父子进程都只读内存时，相安无事。当其中某个进程写内存时，CPU硬件检测到内存页是read-only的，
+ * 于是触发页异常中断（page-fault），陷入kernel的一个中断例程。中断例程中，kernel就会把触发的异常
+ * 的页复制一份，于是父子进程各自持有独立的一份。
+
+ * 根据BGSAVE命令或BGREWRITEAOF命令命令是否正在执行，服务器执行扩展操作所需的负载因子不同，
+ * 这是因为在执行BGSAVE命令或BGREWRITEAOF命令的过程中，Redis需要创建当前服务器进程的子进程，
+ * 而大多数操作系统都采用写时复制(copy on write)技术来优化子进程的使用效率，所以在子进程存在
+ * 期间，服务器会提高执行扩展操作所需的负载因子，从而尽可能地避免在子进程存在期间进行哈希表扩展
+ * 操作，这可以避免不必要的内存写入操作，最大限度的节约内存。
+ * 
  * Note that even when dict_can_resize is set to 0, not all resizes are
  * prevented: a hash table is still allowed to grow if the ratio between
  * the number of elements and the buckets > dict_force_resize_ratio.
@@ -318,10 +334,9 @@ int dictExpand(dict *d, unsigned long size)
     d->rehashidx = 0;
     return DICT_OK;
 
-    /* 顺带一提，上面的代码可以重构成以下形式：
-    
+    /* 顺带一提，上面的代码可以改写成以下形式：
+    // first initialization
     if (d->ht[0].table == NULL) {
-        // 初始化
         d->ht[0] = n;
     } else {
         // rehash 
@@ -400,7 +415,10 @@ int dictRehash(dict *d, int n) {
             // 计算新哈希表的哈希值，以及节点插入的索引位置
             h = dictHashKey(d, de->key) & d->ht[1].sizemask;
 
-            // 插入节点到新哈希表
+            // 插入节点到新哈希表(头插法)
+            /* 初始时d->ht[1].table[h]保存的结点为NULL,第一次插入时将de->next设置为NULL,并将d->ht[1].table[h]设置为de
+               后续再插入新结点时将新结点的next设置为d->ht[1].table[h],将d->ht[1].table[h]设置为de,类似链表中的头插法
+             */
             de->next = d->ht[1].table[h];
             d->ht[1].table[h] = de;
 
@@ -427,7 +445,13 @@ int dictRehash(dict *d, int n) {
  */
 long long timeInMilliseconds(void) {
     struct timeval tv;
-
+    /*
+    struct timeval {
+        time_t       tv_sec;     //seconds 
+        suseconds_t   tv_usec;   //microseconds 
+    };
+    */
+   
     gettimeofday(&tv,NULL);
     return (((long long)tv.tv_sec)*1000)+(tv.tv_usec/1000);
 }
@@ -1489,7 +1513,7 @@ static int _dictKeyIndex(dict *d, const void *key)
         }
 
         // 如果运行到这里时，说明 0 号哈希表中所有节点都不包含 key
-        // 如果这时 rehahs 正在进行，那么继续对 1 号哈希表进行 rehash
+        // 如果这时 rehahs 正在进行，那么继续对 1 号哈希表进行查找
         if (!dictIsRehashing(d)) break;
     }
 
